@@ -30,7 +30,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: KubeDeschedulerSpec defines the desired state of KubeDescheduler
+          description: spec holds user settable values for configuration
           type: object
           properties:
             deschedulingIntervalSeconds:
@@ -71,9 +71,21 @@ spec:
                 way to manage coarse grained logging choices that operators have to
                 interpret for themselves.
               type: string
+            policy:
+              description: Policy is a reference to a configmap containing an upstream
+                DeschedulerPolicy
+              type: object
+              required:
+              - name
+              properties:
+                name:
+                  description: name is the metadata.name of the referenced config
+                    map
+                  type: string
             strategies:
-              description: Strategies contain list of strategies that should be enabled
-                in descheduler.
+              description: 'Strategies contain list of strategies that should be enabled
+                in descheduler. DEPRECATED: This field for configuring strategies
+                has been deprecated in favor of an upstream policy'
               type: array
               items:
                 description: Strategy supported by descheduler
@@ -101,7 +113,8 @@ spec:
               nullable: true
               x-kubernetes-preserve-unknown-fields: true
         status:
-          description: KubeDeschedulerStatus defines the observed state of KubeDescheduler
+          description: status holds observed values from the cluster. They may not
+            be overridden.
           type: object
           properties:
             conditions:
