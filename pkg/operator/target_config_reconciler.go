@@ -72,6 +72,7 @@ func NewTargetConfigReconciler(
 	operatorClientInformer operatorclientinformers.KubeDeschedulerInformer,
 	deschedulerClient *operatorclient.DeschedulerClient,
 	kubeClient kubernetes.Interface,
+	kubeInformersForNamespaces v1helpers.KubeInformersForNamespaces,
 	eventRecorder events.Recorder,
 ) *TargetConfigReconciler {
 	c := &TargetConfigReconciler{
@@ -82,7 +83,7 @@ func NewTargetConfigReconciler(
 		eventRecorder:     eventRecorder,
 		queue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "TargetConfigReconciler"),
 	}
-
+	kubeInformersForNamespaces.InformersFor(operatorclient.OperatorNamespace).Core().V1().ConfigMaps().Informer().AddEventHandler(c.eventHandler())
 	operatorClientInformer.Informer().AddEventHandler(c.eventHandler())
 
 	return c
@@ -99,8 +100,14 @@ func (c TargetConfigReconciler) sync() error {
 		return fmt.Errorf("descheduler should have an interval set")
 	}
 
-	if err := validateStrategies(descheduler.Spec.Strategies); err != nil {
-		return err
+	// TODO(@damemi): Remove this check and related functions when Strategies is removed
+	if len(descheduler.Spec.Strategies) > 0 {
+		klog.Warningf("'spec.Strategies' has been deprecated, use 'policy' instead")
+		if err := validateStrategies(descheduler.Spec.Strategies); err != nil {
+			return err
+		}
+	} else if len(descheduler.Spec.Policy.Name) == 0 {
+		return fmt.Errorf("descheduler must set a policy configmap")
 	}
 	forceDeployment := false
 	_, forceDeployment, err = c.manageConfigMap(descheduler)
@@ -153,11 +160,23 @@ func (c *TargetConfigReconciler) manageConfigMap(descheduler *deschedulerv1beta1
 			UID:        descheduler.UID,
 		},
 	}
-	configMapString, err := generateConfigMapString(descheduler.Spec.Strategies)
-	if err != nil {
-		return nil, false, err
+	data := ""
+	if len(descheduler.Spec.Strategies) > 0 {
+		configMapString, err := generateConfigMapString(descheduler.Spec.Strategies)
+		if err != nil {
+			return nil, false, err
+		}
+		data = configMapString
+	} else if descheduler.Spec.Policy.Name == descheduler.Name {
+		return nil, false, fmt.Errorf("%s is reserved as a policy configmap name", descheduler.Name)
+	} else {
+		configMap, err := c.kubeClient.CoreV1().ConfigMaps(operatorclient.OperatorNamespace).Get(c.ctx, descheduler.Spec.Policy.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, false, err
+		}
+		data = configMap.Data["policy.cfg"]
 	}
-	required.Data = map[string]string{"policy.yaml": configMapString}
+	required.Data = map[string]string{"policy.yaml": data}
 	return resourceapply.ApplyConfigMap(c.kubeClient.CoreV1(), c.eventRecorder, required)
 }
 
@@ -405,7 +424,12 @@ func (c *TargetConfigReconciler) manageDeployment(descheduler *deschedulerv1beta
 	required.Spec.Template.Spec.Containers[0].Image = descheduler.Spec.Image
 	required.Spec.Template.Spec.Containers[0].Args = append(required.Spec.Template.Spec.Containers[0].Args,
 		fmt.Sprintf("--descheduling-interval=%ss", strconv.Itoa(int(*descheduler.Spec.DeschedulingIntervalSeconds))))
-	required.Spec.Template.Spec.Volumes[0].VolumeSource.ConfigMap.LocalObjectReference.Name = descheduler.Name
+
+	policyConfigMap := descheduler.Spec.Policy.Name
+	if len(descheduler.Spec.Strategies) > 0 {
+		policyConfigMap = descheduler.Name
+	}
+	required.Spec.Template.Spec.Volumes[0].VolumeSource.ConfigMap.LocalObjectReference.Name = policyConfigMap
 
 	// Add any additional flags that were specified
 	if len(descheduler.Spec.Flags) > 0 {

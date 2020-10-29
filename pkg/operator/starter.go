@@ -46,6 +46,7 @@ func RunOperator(ctx context.Context, cc *controllercmd.ControllerContext) error
 		operatorConfigInformers.Kubedeschedulers().V1beta1().KubeDeschedulers(),
 		deschedulerClient,
 		kubeClient,
+		kubeInformersForNamespaces,
 		cc.EventRecorder,
 	)
 
