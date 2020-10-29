@@ -28,7 +28,8 @@ type KubeDeschedulerSpec struct {
 	operatorv1.OperatorSpec `json:",inline"`
 
 	// Strategies contain list of strategies that should be enabled in descheduler.
-	// DEPRECATED: This field for configuring strategies has been deprecated in favor of an upstream policy
+	// DEPRECATED: This field for configuring strategies has been deprecated in favor of an upstream policy.
+	// Note that it may not support all strategies, please use "policy" instead.
 	// +optional
 	Strategies []Strategy `json:"strategies,omitempty"`
 
