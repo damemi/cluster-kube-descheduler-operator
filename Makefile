@@ -46,12 +46,12 @@ test-e2e: test-unit
 .PHONY: test-e2e
 
 generate: update-codegen-crds generate-clients
-.PHONY: generate
+.PHONY: update-codegen-crds
 
 generate-clients:
-	./vendor/k8s.io/code-generator/generate-groups.sh all github.com/openshift/cluster-kube-descheduler-operator/pkg/generated github.com/openshift/cluster-kube-descheduler-operator/pkg/apis descheduler:v1beta1
+	bash ./vendor/k8s.io/code-generator/generate-groups.sh all github.com/openshift/cluster-kube-descheduler-operator/pkg/generated github.com/openshift/cluster-kube-descheduler-operator/pkg/apis descheduler:v1beta1,v1
 .PHONY: generate-clients
 
 clean:
-	$(RM) ./cluster-kube-scheduler-operator
+	$(RM) ./cluster-kube-descheduler-operator
 .PHONY: clean
